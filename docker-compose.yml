@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+  db:
+    image: postgres
+    container_name: expense-database
+    ports:
+      - "5432:5432"
+    volumes:
+      - expense_db_v1:/var/lib/postgresql/data
+    networks:
+      - db_network
+    environment:
+      POSTGRES_USER: expense
+      POSTGRES_PASSWORD: expense
+      POSTGRES_DB: expense
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+
+  web:
+    image: python:3.11-slim
+    container_name: expense-django-app
+    volumes:
+      - .:/code  # Adjust this based on your Django project structure
+    build: ./
+    command: bash -c "python3 manage.py makemigrations && python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:8000"
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - db_network
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DJANGO_SECRET: '${JWT_SECRET_KEY}'  # *** CHANGE THIS ***
+
+  hasura:
+    container_name: expense-hasura
+    image: hasura/graphql-engine:v2.34.0
+    volumes:
+      - ./hasura/migrations:/hasura-migrations
+      - ./hasura/metadata:/hasura-metadata
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - web
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: 'postgres://expense:expense@db:5432/expense'
+      HASURA_GRAPHQL_ENABLE_CONSOLE: 'true'
+      HASURA_GRAPHQL_DEV_MODE: 'true'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: 'startup, http-log, webhook-log, websocket-log, query-log'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: 'public'
+      HASURA_GRAPHQL_ADMIN_SECRET: 'expense'
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"${JWT_SECRET_KEY}","claims_namespace":"user_claims","claims_format":"json"}'
+    
+    networks:
+      - db_network
+
+networks:
+  db_network:
+
+volumes:
+  expense_db_v1:
