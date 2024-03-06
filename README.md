@@ -1,0 +1,2 @@
+# django-graphql-hasura
+demo
